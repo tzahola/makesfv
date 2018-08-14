@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+output='-'
+files=()
+while (( $# > 0 )); do
+    if [[ "$1" == '-o' || "$1" == '--output' ]]; then
+        shift; output="$1"; shift
+    elif [[ "$1" == '-h' || "$1" == '--help' ]]; then
+        cat <<-EOF
+makesfv [<options>] [[--] <path>...]
+
+    -o <file>, --output <file>
+        Output file. "-" means stdout, which is the default.
+
+    [--] <path>...
+        Files to calculate checksum for. Directories are processed recursively.
+        Use "--" to avoid confusing paths with options.
+
+    -h, --help
+        Print this help.
+
+EOF
+        exit 0
+    else
+        if [[ "$1" == '--' ]]; then
+            shift
+        fi
+        while (( $# > 0 )); do
+            if [[ "$1" == -* ]]; then
+                echo "Path must not begin with dash (\"-\"): $1"
+                exit 1
+            fi
+            files+=("$1"); shift
+        done
+    fi
+done
+
+find -- "${files[@]}" \( \
+        -name '.DS_Store' -or \
+        -name thumbs.db -or \
+        -name '._*' -or \
+        -name '@eaDir' \
+    \) -prune -or \
+    -type f -print0 | sort -z | {
+    if [[ "$output" == "-" ]]; then
+        xargs -0 cksfv
+    else
+        tmp="$(mktemp </dev/null)" # NB: to exclude output file from checksumming
+        xargs -0 cksfv >"$tmp" && mv "$tmp" "$output"
+    fi
+}
